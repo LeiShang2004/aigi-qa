@@ -238,6 +238,7 @@ def build_candidates(
             "total_global_labels": total_global_labels,
             "total_abnormality_score": total_score,
             "has_no_abnormality": total_local_boxes == 0 and total_global_labels == 0,
+            "has_source_conflict": bool(a_record.get("source_conflict") or b_record.get("source_conflict")),
             "has_rare_local": bool(local_union & RARE_LOCAL_CODES),
             "has_rare_global": bool(global_union & RARE_GLOBAL_CODES),
             "has_common_priority": bool((local_union | global_union) & set(COMMON_PRIORITY)),
@@ -282,7 +283,7 @@ def select_balanced(candidates: list[dict[str, Any]], limit: int) -> list[dict[s
         ),
         (
             "high_local_agreement",
-            4,
+            3,
             [
                 item
                 for item in candidates
@@ -291,6 +292,21 @@ def select_balanced(candidates: list[dict[str, Any]], limit: int) -> list[dict[s
             lambda item: (
                 -len(item["local_intersection"]),
                 -item["total_local_boxes"],
+                -item["total_abnormality_score"],
+                item["image_id"],
+            ),
+        ),
+        (
+            "source_conflict",
+            3,
+            [
+                item
+                for item in candidates
+                if item["has_source_conflict"]
+            ],
+            lambda item: (
+                item["local_jaccard"],
+                item["global_jaccard"],
                 -item["total_abnormality_score"],
                 item["image_id"],
             ),
@@ -327,7 +343,7 @@ def select_balanced(candidates: list[dict[str, Any]], limit: int) -> list[dict[s
         ),
         (
             "rare_or_edge_category",
-            4,
+            3,
             [
                 item
                 for item in candidates
@@ -343,7 +359,7 @@ def select_balanced(candidates: list[dict[str, Any]], limit: int) -> list[dict[s
         ),
         (
             "no_abnormality_agreement",
-            3,
+            2,
             [
                 item
                 for item in candidates
@@ -661,6 +677,7 @@ def selection_row(candidate: dict[str, Any], rank: int, output_dir: Path) -> dic
         "validity_b": candidate.get("validity_b"),
         "local_jaccard": candidate.get("local_jaccard"),
         "global_jaccard": candidate.get("global_jaccard"),
+        "has_source_conflict": candidate.get("has_source_conflict"),
         "a_local_codes": candidate.get("a_local_codes"),
         "b_local_codes": candidate.get("b_local_codes"),
         "a_global_codes": candidate.get("a_global_codes"),
@@ -673,8 +690,8 @@ def write_selection_markdown(path: Path, rows: list[dict[str, Any]], title: str)
     lines = [
         f"# {title}",
         "",
-        "| rank | image_id | reason | A | B | validity A/B | local J | global J | A local | B local | A global | B global |",
-        "| ---: | ---: | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |",
+        "| rank | image_id | reason | source conflict | A | B | validity A/B | local J | global J | A local | B local | A global | B global |",
+        "| ---: | ---: | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |",
     ]
     for row in rows:
         lines.append(
@@ -684,6 +701,7 @@ def write_selection_markdown(path: Path, rows: list[dict[str, Any]], title: str)
                     md_cell(row["rank"]),
                     md_cell(row["image_id"]),
                     md_cell(row["selection_reason"]),
+                    md_cell(row["has_source_conflict"]),
                     md_cell(row["a_annotator"]),
                     md_cell(row["b_annotator"]),
                     md_cell(f"{row['validity_a']} / {row['validity_b']}"),

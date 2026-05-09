@@ -106,6 +106,7 @@ python3 scripts/visualize_1k_annotations.py \
 默认 `--selection balanced` 会优先覆盖：
 
 - 有效性分歧样本。
+- 平铺列与 `标注环节结果` 冲突样本。
 - 局部异常高一致样本。
 - 局部异常强分歧样本。
 - 整图异常强分歧样本。
