@@ -1,0 +1,22 @@
+# Local server/data notes. Do not publish this file.
+服务器上数据信息.md
+
+# Generated analysis outputs.
+outputs/
+analysis*/
+*.jsonl
+stats.json
+stats.md
+
+# Python cache and local runtime noise.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# OS/editor files.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
