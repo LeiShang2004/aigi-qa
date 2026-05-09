@@ -565,6 +565,11 @@ def counter_table(counter: Counter, denominator: int | None = None) -> list[dict
     ]
 
 
+def md_cell(value: Any) -> str:
+    text = "" if value is None else str(value)
+    return text.replace("|", "\\|").replace("\n", "<br>")
+
+
 def jaccard(left: set[str], right: set[str]) -> float:
     union = left | right
     if not union:
@@ -810,7 +815,7 @@ def table_lines(title: str, rows: list[dict[str, Any]], limit: int = 20) -> list
         return lines + ["无数据", ""]
     lines.extend(["| key | count | pct |", "| --- | ---: | ---: |"])
     for row in rows[:limit]:
-        lines.append(f"| {row.get('key')} | {row.get('count')} | {row.get('pct')} |")
+        lines.append(f"| {md_cell(row.get('key'))} | {md_cell(row.get('count'))} | {md_cell(row.get('pct'))} |")
     lines.append("")
     return lines
 
@@ -823,7 +828,7 @@ def code_table_lines(title: str, rows: list[dict[str, Any]], limit: int = 20) ->
     for row in rows[:limit]:
         key = row.get("key")
         name = CODE_NAME_MAP.get(key, "")
-        lines.append(f"| {key} | {name} | {row.get('count')} | {row.get('pct')} |")
+        lines.append(f"| {md_cell(key)} | {md_cell(name)} | {md_cell(row.get('count'))} | {md_cell(row.get('pct'))} |")
     lines.append("")
     return lines
 
@@ -841,9 +846,10 @@ def per_code_consistency_lines(title: str, rows: list[dict[str, Any]], limit: in
     for row in rows[:limit]:
         any_positive = row["both_yes"] + row["left_only"] + row["right_only"]
         lines.append(
-            f"| {row['code']} | {row.get('name') or ''} | {any_positive} | {row['both_yes']} | "
-            f"{row['left_only']} | {row['right_only']} | {row['agree_rate']} | "
-            f"{row['positive_agree_rate_among_any_positive']} | {row['kappa']} |"
+            f"| {md_cell(row['code'])} | {md_cell(row.get('name') or '')} | {md_cell(any_positive)} | "
+            f"{md_cell(row['both_yes'])} | {md_cell(row['left_only'])} | {md_cell(row['right_only'])} | "
+            f"{md_cell(row['agree_rate'])} | {md_cell(row['positive_agree_rate_among_any_positive'])} | "
+            f"{md_cell(row['kappa'])} |"
         )
     lines.append("")
     return lines
@@ -894,9 +900,9 @@ def render_stats_markdown(stats: dict[str, Any]) -> str:
         lines.extend(["| record_key | image_id | columns | mark_results |", "| --- | ---: | --- | --- |"])
         for item in stats["source_conflict_examples"][:20]:
             lines.append(
-                f"| {item['record_key']} | {item['image_id']} | "
-                f"`{stable_json_dumps(item['columns_signature'])}` | "
-                f"`{stable_json_dumps(item['mark_results_signature'])}` |"
+                f"| {md_cell(item['record_key'])} | {md_cell(item['image_id'])} | "
+                f"`{md_cell(stable_json_dumps(item['columns_signature']))}` | "
+                f"`{md_cell(stable_json_dumps(item['mark_results_signature']))}` |"
             )
         lines.append("")
     return "\n".join(lines)
