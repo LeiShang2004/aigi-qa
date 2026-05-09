@@ -4,6 +4,9 @@
 # Generated analysis outputs.
 outputs/
 analysis*/
+analysis_*-stats.md
+prepare_1k_annotations.md
+visualizations*/
 *.jsonl
 stats.json
 stats.md

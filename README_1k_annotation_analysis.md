@@ -70,6 +70,62 @@ ls -lh /mnt/workspace/workgroup/leijian/benchmark/dataset/1k
 ls -lh /mnt/workspace/workgroup/leijian/benchmark/dataset/1k/labels
 ```
 
+## 可视化少量 A/B 标注样例
+
+先安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+默认从 `analysis_mark_results` 读取清洗后的 JSONL，按分层策略选择 20 张图：
+
+```bash
+python3 scripts/visualize_1k_annotations.py \
+  --dataset-root /mnt/workspace/workgroup/leijian/benchmark/dataset/1k \
+  --analysis-dir /mnt/workspace/workgroup/leijian/benchmark/dataset/1k/analysis_mark_results \
+  --output-dir /mnt/workspace/workgroup/leijian/benchmark/dataset/1k/visualizations_mark_results_20 \
+  --limit 20 \
+  --selection balanced
+```
+
+每张选中图片会生成一个子目录，包含：
+
+- `original.*`：原图。
+- `bbox_A.jpg`：只画标注 A 的局部异常 bbox。
+- `bbox_B.jpg`：只画标注 B 的局部异常 bbox。
+- `bbox_A_B.jpg`：同时画 A/B 的 bbox；A 为实线，B 为虚线。
+- `annotations.json`：A/B 的完整标注记录、局部/整图摘要、一致性指标。
+- `annotations.md`：便于人工快速阅读的 A/B 标注摘要。
+
+汇总文件：
+
+- `selected_images.jsonl`
+- `selected_images.md`
+
+默认 `--selection balanced` 会优先覆盖：
+
+- 有效性分歧样本。
+- 局部异常高一致样本。
+- 局部异常强分歧样本。
+- 整图异常强分歧样本。
+- 稀有或边界类别样本。
+- 两人均未标异常的样本。
+
+也可以指定模式：
+
+```bash
+--selection disagreement
+--selection agreement
+--selection random
+```
+
+或显式指定图片：
+
+```bash
+--image-ids 8,12,50
+```
+
 ## 统计口径
 
 - 有效性一致性：两条标注记录的 `图像有效性` 是否完全一致。
@@ -83,4 +139,3 @@ ls -lh /mnt/workspace/workgroup/leijian/benchmark/dataset/1k/labels
 - 多标签一致性：
   - `完全一致率`：两人选择的 code set 完全相同。
   - `平均 Jaccard`：两人 code set 的交并比平均值。
-
