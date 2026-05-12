@@ -129,6 +129,31 @@ python3 scripts/visualize_1k_annotations.py \
 --image-ids 8,12,50
 ```
 
+## 旧粗标与新精标关系分析
+
+脚本会读取 `服务器上数据信息.md` 推断数据路径；如果服务器 clone 目录里没有这个本地文件，则显式传 `--dataset-root`。
+
+```bash
+python3 scripts/analyze_old_vs_fine_labels.py \
+  --server-info 服务器上数据信息.md \
+  --dataset-root /mnt/workspace/workgroup/leijian/benchmark/dataset/1k \
+  --output-dir /mnt/workspace/workgroup/leijian/benchmark/dataset/1k/old_vs_fine_analysis
+```
+
+输出：
+
+- `old_vs_fine_stats.md`：人类可读摘要，分别包含 `columns` 和 `mark-results` 两个口径。
+- `old_vs_fine_stats.json`：机器可读完整统计。
+- `old_vs_fine_image_rows_columns.jsonl`：columns 口径逐图聚合明细。
+- `old_vs_fine_image_rows_mark-results.jsonl`：mark-results 口径逐图聚合明细。
+
+主要统计包括：
+
+- 旧版 `标注1/标注2/标注3` 的严格多数标签与新版异常数量、有效性之间的交叉表。
+- 按旧严格多数标签分组的新精标均值，例如 bbox 数、整图异常数、逻辑类/假感类细标投票。
+- 旧标签票数与新精标特征的 Pearson / Spearman 相关系数。
+- 每个旧严格多数标签下最常出现的新局部/整图异常 code。
+
 ## 统计口径
 
 - 有效性一致性：两条标注记录的 `图像有效性` 是否完全一致。
