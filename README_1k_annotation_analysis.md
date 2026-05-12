@@ -45,6 +45,8 @@ python3 scripts/prepare_1k_annotations.py \
 - `global_labels.jsonl`：整图异常展开表，一个整图异常标签一行。
 - `image_summary.jsonl`：按图片聚合两人标注，包括投票、异常 code 计数、一致性辅助字段。
 - `raw_rows.jsonl`：原始关键字段备份，便于追溯脏数据。
+- `source_conflicts.jsonl`：平铺列与 `标注环节结果` 不一致的完整机器可读明细。
+- `source_conflicts.md`：前若干条冲突的人类可读说明，默认最多 50 条，可用 `--max-conflict-examples` 调整。
 - `stats.json`：机器可读统计。
 - `stats.md`：人可读统计摘要，适合直接回传。
 

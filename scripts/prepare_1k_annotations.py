@@ -439,6 +439,61 @@ def parsed_signature(parsed: ParsedAnnotation) -> dict[str, Any]:
     }
 
 
+def parsed_source_summary(parsed: ParsedAnnotation) -> dict[str, Any]:
+    local_counts = Counter(item["code"] for item in parsed.locals if item.get("code"))
+    global_counts = Counter(item["code"] for item in parsed.globals if item.get("code"))
+    return {
+        "validity": parsed.validity,
+        "global_count": len(parsed.globals),
+        "global_codes": sorted(global_counts),
+        "global_code_counts": dict(sorted(global_counts.items())),
+        "global_items": [
+            {
+                "code": item.get("code"),
+                "label": item.get("label"),
+                "severity": item.get("severity"),
+                "severity_raw": item.get("severity_raw"),
+            }
+            for item in parsed.globals
+        ],
+        "local_count": len(parsed.locals),
+        "local_codes": sorted(local_counts),
+        "local_code_counts": dict(sorted(local_counts.items())),
+        "local_items": [
+            {
+                "index": index + 1,
+                "code": item.get("code"),
+                "label": item.get("label"),
+                "severity": item.get("severity"),
+                "severity_raw": item.get("severity_raw"),
+                "bbox_xyxy": item.get("bbox_xyxy"),
+            }
+            for index, item in enumerate(parsed.locals)
+        ],
+        "warnings": parsed.warnings,
+        "source_has_data": parsed.source_has_data,
+    }
+
+
+def signature_diff(columns_sig: dict[str, Any], mark_sig: dict[str, Any]) -> list[str]:
+    diffs: list[str] = []
+    if columns_sig.get("validity") != mark_sig.get("validity"):
+        diffs.append(f"validity: columns={columns_sig.get('validity')} / mark_results={mark_sig.get('validity')}")
+
+    for prefix, label in (("global", "整图异常"), ("local", "局部异常")):
+        codes_key = f"{prefix}_codes"
+        count_key = f"{prefix}_count"
+        columns_codes = set(columns_sig.get(codes_key) or [])
+        mark_codes = set(mark_sig.get(codes_key) or [])
+        only_columns = sorted(columns_codes - mark_codes)
+        only_mark = sorted(mark_codes - columns_codes)
+        if only_columns or only_mark:
+            diffs.append(f"{label} code集合不同: only_columns={only_columns}, only_mark_results={only_mark}")
+        if columns_sig.get(count_key) != mark_sig.get(count_key):
+            diffs.append(f"{label} 数量不同: columns={columns_sig.get(count_key)} / mark_results={mark_sig.get(count_key)}")
+    return diffs
+
+
 def choose_parsed(
     columns: ParsedAnnotation,
     mark_results: ParsedAnnotation,
@@ -546,6 +601,9 @@ def normalize_label_record(
         "parse_warnings": chosen.warnings,
         "columns_signature": columns_sig,
         "mark_results_signature": mark_sig,
+        "columns_source_summary": parsed_source_summary(columns),
+        "mark_results_source_summary": parsed_source_summary(mark_results),
+        "source_conflict_reasons": signature_diff(columns_sig, mark_sig) if source_conflict else [],
         "source_conflict": source_conflict,
     }
     return record, raw_subset
@@ -855,6 +913,129 @@ def per_code_consistency_lines(title: str, rows: list[dict[str, Any]], limit: in
     return lines
 
 
+def format_code_counts(counts: dict[str, int] | None) -> str:
+    if not counts:
+        return "无"
+    return ", ".join(f"{code}:{count}" for code, count in sorted(counts.items()))
+
+
+def format_global_items(items: list[dict[str, Any]] | None) -> str:
+    if not items:
+        return "无"
+    return "; ".join(
+        f"{item.get('code')}({item.get('severity') or '?'})"
+        for item in items
+    )
+
+
+def format_local_items(items: list[dict[str, Any]] | None, limit: int = 12) -> str:
+    if not items:
+        return "无"
+    parts = []
+    for item in items[:limit]:
+        box = item.get("bbox_xyxy")
+        if isinstance(box, list) and len(box) == 4:
+            box_text = "[" + ",".join(str(round(float(value), 1)) for value in box) + "]"
+        else:
+            box_text = "bbox?"
+        parts.append(f"#{item.get('index')} {item.get('code')}({item.get('severity') or '?'}) {box_text}")
+    if len(items) > limit:
+        parts.append(f"... +{len(items) - limit} more")
+    return "; ".join(parts)
+
+
+def build_source_conflict_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        if not record.get("source_conflict"):
+            continue
+        rows.append(
+            {
+                "record_key": record.get("record_key"),
+                "source_file": record.get("source_file"),
+                "row_index": record.get("row_index"),
+                "image_id": record.get("image_id"),
+                "url": record.get("url"),
+                "sample_id": record.get("sample_id"),
+                "annotator": record.get("annotator"),
+                "old_labels": record.get("old_labels"),
+                "reasons": record.get("source_conflict_reasons") or [],
+                "columns_signature": record.get("columns_signature"),
+                "mark_results_signature": record.get("mark_results_signature"),
+                "columns_summary": record.get("columns_source_summary"),
+                "mark_results_summary": record.get("mark_results_source_summary"),
+            }
+        )
+    return rows
+
+
+def render_source_conflicts_markdown(conflict_records: list[dict[str, Any]], limit: int = 50) -> str:
+    lines = [
+        "# 平铺列与标注环节结果冲突明细",
+        "",
+        "本文件逐条列出同一个 CSV 行内两套来源解析出的标注差异：",
+        "",
+        "- `columns`：来自 `局部异常框选` 与 `有效性与整图异常选择` 两个平铺列。",
+        "- `mark_results`：来自 `标注环节结果` 列中各个 `MarkResult`。",
+        "",
+        "冲突判定比较的是：图像有效性、整图异常 code 集合、局部异常 code 集合、整图异常数量、局部 bbox 数量。",
+        "这里不比较 bbox 坐标、严重度和文本描述；这些字段会在下方摘要中保留，供人工复核。",
+        "",
+        f"- 冲突记录总数：{len(conflict_records)}",
+        f"- 本文件展示前 {min(limit, len(conflict_records))} 条；完整机器可读明细见 `source_conflicts.jsonl`。",
+        "",
+    ]
+
+    for index, record in enumerate(conflict_records[:limit], 1):
+        columns = record.get("columns_summary") or {}
+        mark_results = record.get("mark_results_summary") or {}
+        lines.extend(
+            [
+                f"## {index}. {record.get('record_key')} / image_id={record.get('image_id')}",
+                "",
+                f"- CSV 文件：`{record.get('source_file')}`，行号：`{record.get('row_index')}`",
+                f"- 标注员：`{record.get('annotator')}`",
+                f"- 样本ID：`{record.get('sample_id')}`",
+                f"- URL：{record.get('url')}",
+                f"- 旧版三人粗标：`{record.get('old_labels')}`",
+                f"- 差异原因：`{record.get('reasons')}`",
+                "",
+                "| 来源 | 有效性 | 整图code计数 | 局部code计数 | 整图数量 | 局部bbox数量 |",
+                "| --- | --- | --- | --- | ---: | ---: |",
+                (
+                    f"| columns | {md_cell(columns.get('validity'))} | "
+                    f"{md_cell(format_code_counts(columns.get('global_code_counts')))} | "
+                    f"{md_cell(format_code_counts(columns.get('local_code_counts')))} | "
+                    f"{md_cell(columns.get('global_count'))} | {md_cell(columns.get('local_count'))} |"
+                ),
+                (
+                    f"| mark_results | {md_cell(mark_results.get('validity'))} | "
+                    f"{md_cell(format_code_counts(mark_results.get('global_code_counts')))} | "
+                    f"{md_cell(format_code_counts(mark_results.get('local_code_counts')))} | "
+                    f"{md_cell(mark_results.get('global_count'))} | {md_cell(mark_results.get('local_count'))} |"
+                ),
+                "",
+                "**columns 整图异常**：",
+                "",
+                md_cell(format_global_items(columns.get("global_items"))),
+                "",
+                "**mark_results 整图异常**：",
+                "",
+                md_cell(format_global_items(mark_results.get("global_items"))),
+                "",
+                "**columns 局部 bbox**：",
+                "",
+                md_cell(format_local_items(columns.get("local_items"))),
+                "",
+                "**mark_results 局部 bbox**：",
+                "",
+                md_cell(format_local_items(mark_results.get("local_items"))),
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def render_stats_markdown(stats: dict[str, Any]) -> str:
     counts = stats["counts"]
     consistency = stats["consistency"]
@@ -1038,10 +1219,13 @@ def run(args: argparse.Namespace) -> int:
             "global_labels": "global_labels.jsonl",
             "image_summary": "image_summary.jsonl",
             "raw_rows": "raw_rows.jsonl",
+            "source_conflicts": "source_conflicts.jsonl",
+            "source_conflicts_markdown": "source_conflicts.md",
             "stats_json": "stats.json",
             "stats_markdown": "stats.md",
         },
     }
+    source_conflict_records = build_source_conflict_records(records)
     stats = build_stats(images, records, image_summaries, source_conflict_examples, metadata)
 
     write_jsonl(output_dir / "images.jsonl", images)
@@ -1050,6 +1234,11 @@ def run(args: argparse.Namespace) -> int:
     write_jsonl(output_dir / "global_labels.jsonl", global_labels)
     write_jsonl(output_dir / "image_summary.jsonl", image_summaries)
     write_jsonl(output_dir / "raw_rows.jsonl", raw_rows)
+    write_jsonl(output_dir / "source_conflicts.jsonl", source_conflict_records)
+    (output_dir / "source_conflicts.md").write_text(
+        render_source_conflicts_markdown(source_conflict_records, args.max_conflict_examples),
+        encoding="utf-8",
+    )
     (output_dir / "stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     (output_dir / "stats.md").write_text(render_stats_markdown(stats), encoding="utf-8")
 
